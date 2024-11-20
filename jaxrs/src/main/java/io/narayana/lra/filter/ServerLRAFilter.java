@@ -670,19 +670,15 @@ public class ServerLRAFilter implements ContainerRequestFilter, ContainerRespons
     }
 
     // convert the list of steps carried out by the filters into a warning message
+    // the successful operations are logged at debug and the unsuccessful operations are reported back to the caller
+    // TODO there should only be one failed op so I don't think attempting to report multiple failures is useful
     private String processLRAOperationFailures(ArrayList<Progress> progress) {
         StringJoiner badOps = new StringJoiner(", ");
-        StringJoiner goodOps = new StringJoiner(", ");
         StringBuilder code = new StringBuilder("-");
 
         progress.forEach(p -> {
-            if (p.wasSuccessful()) {
-                code.insert(0, p.progress.ordinal());
-                goodOps.add(String.format("%s (%s)", p.progress.name(), p.progress.status));
-            } else {
-                code.append(p.progress.ordinal());
-                badOps.add(String.format("%s (%s)", p.progress.name(), p.reason));
-            }
+            code.append(p.progress.ordinal());
+            badOps.add(String.format("%s (%s)", p.progress.name(), p.reason));
         });
 
         /*
@@ -699,7 +695,7 @@ public class ServerLRAFilter implements ContainerRequestFilter, ContainerRespons
          */
 
         if (badOps.length() != 0) {
-            return LRALogger.i18nLogger.warn_LRAStatusInDoubt(String.format("%s: %s (%s)", code, badOps, goodOps));
+            return LRALogger.i18nLogger.warn_LRAStatusInDoubt(String.format("%s: %s", code, badOps));
         }
 
         return null;
@@ -711,11 +707,16 @@ public class ServerLRAFilter implements ContainerRequestFilter, ContainerRespons
 
     // add another step to the list of steps performed so far
     private ArrayList<Progress> updateProgress(ArrayList<Progress> progress, ProgressStep step, String reason) {
-        if (progress == null) {
-            progress = new ArrayList<>();
-        }
+        if (reason == null) {
+            LRALogger.logger.debug(step.toString());
+        } else {
 
-        progress.add(new Progress(step, reason));
+            if (progress == null) {
+                progress = new ArrayList<>();
+            }
+
+            progress.add(new Progress(step, reason));
+        }
 
         return progress;
     }
@@ -753,11 +754,13 @@ public class ServerLRAFilter implements ContainerRequestFilter, ContainerRespons
             updateProgress(progress, ProgressStep.Started, null);
             return lra;
         } catch (WebApplicationException e) {
-            updateProgress(progress, ProgressStep.StartFailed, e.getMessage());
+            String msg = e.getResponse().readEntity(String.class);
+
+            updateProgress(progress, ProgressStep.StartFailed, msg);
 
             abortWith(containerRequestContext, null,
                     e.getResponse().getStatus(),
-                    String.format("%s %s", e.getClass().getSimpleName(), e.getMessage()),
+                    msg,
                     progress);
         }
 

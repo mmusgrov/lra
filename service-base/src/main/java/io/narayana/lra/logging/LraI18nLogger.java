@@ -48,7 +48,7 @@ public interface LraI18nLogger {
     String error_noContentOnGetStatus(URI coordinator, URL lra);
 
     @Message(id = 25007, value = "LRA coordinator '%s' returned an invalid status for LRA '%s'")
-    String error_invalidArgumentOnStatusFromCoordinator(URI coordinator, URL lra, @Cause Throwable t);
+    String error_invalidArgumentOnStatusFromCoordinator(URI coordinator, URL lra);
 
     @Message(id = 25008, value = "Too late to join with the LRA '%s', coordinator response: '%s'")
     String error_tooLateToJoin(String lra, String response);
@@ -135,7 +135,7 @@ public interface LraI18nLogger {
     @Message(id=25031, value = "%s: Invalid link URI (%s): missing compensator or after LRA callback")
     String error_missingCompensator(URI id, String linkURI);
 
-    @Message(id = 25032, value = "LRA Record: Cannot save state (reason: %s)")
+    @Message(id = 25032, value = "LRA Record: Cannot save state, %s")
     String warn_saveState(String cause);
 
     @LogMessage(level = WARN)
@@ -146,9 +146,8 @@ public interface LraI18nLogger {
     @Message(id = 25034, value = "LRA Recovery cannot remove LRA id %s from the object store. The uid segment '%s' is probably invalid.")
     void warn_cannotRemoveUidRecord(String lraId, String uid, @Cause Throwable t);
 
-    @LogMessage(level = WARN)
     @Message(id = 25035, value = "The start LRA call failed with cause: %s")
-    void warn_startLRAFailed(String message, @Cause Throwable t);
+    String warn_startLRAFailed(String message);
 
     @LogMessage(level = WARN)
     @Message(id = 25036, value = "CDI Context not available: %s")

@@ -119,7 +119,7 @@ public class LRACDIExtension implements Extension {
         if (!annotations.containsKey(DotNames.LRA)) {
             return false;
         } else if (!annotations.containsKey(DotNames.COMPENSATE) && !annotations.containsKey(DotNames.AFTER_LRA)) {
-            throw new IllegalStateException(String.format("%s: %s",
+            throw new IllegalStateException(String.format("%s: %s", // TODO use the i18n logger - similarly for the other usages
                 classInfo.name(), "The class contains an LRA method and no Compensate or AfterLRA method was found."));
         } else {
             return true;

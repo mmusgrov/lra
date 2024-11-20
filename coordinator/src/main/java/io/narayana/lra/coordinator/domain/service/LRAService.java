@@ -17,10 +17,8 @@ import io.narayana.lra.coordinator.domain.model.LRAParticipantRecord;
 import io.narayana.lra.coordinator.internal.LRARecoveryModule;
 import io.narayana.lra.coordinator.domain.model.LongRunningAction;
 
-import jakarta.ws.rs.ServiceUnavailableException;
 import org.eclipse.microprofile.lra.annotation.LRAStatus;
 
-import jakarta.ws.rs.InternalServerErrorException;
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Response;
@@ -36,6 +34,7 @@ import java.util.regex.Pattern;
 
 import static jakarta.ws.rs.core.Response.Status.INTERNAL_SERVER_ERROR;
 import static jakarta.ws.rs.core.Response.Status.NOT_FOUND;
+import static jakarta.ws.rs.core.Response.Status.SERVICE_UNAVAILABLE;
 import static java.util.stream.Collectors.toList;
 
 public class LRAService {
@@ -52,7 +51,8 @@ public class LRAService {
             String uid = LRAConstants.getLRAUid(lraId);
 
             if (uid == null || uid.isEmpty()) {
-                String errorMsg = "Invalid transaction format of LRA id: " + lraId;
+                String errorMsg = LRALogger.i18nLogger.warn_invalid_uri(
+                        String.valueOf(lraId), "LongRunningAction.getTransaction");
                 throw new NotFoundException(errorMsg, // 404
                         Response.status(NOT_FOUND).entity(errorMsg).build());
             }
@@ -72,8 +72,8 @@ public class LRAService {
                     }
                 }
 
-                String errorMsg = "Invalid transaction id: " + lraId;
-                throw new NotFoundException(errorMsg, // 404
+                String errorMsg = "Cannot find transaction id: " + lraId;
+                throw new NotFoundException(errorMsg,
                         Response.status(NOT_FOUND).entity(errorMsg).build());
             }
 
@@ -254,24 +254,33 @@ public class LRAService {
         try {
             lra = new LongRunningAction(this, baseUri, lookupTransaction(parentLRA), clientId);
         } catch (URISyntaxException e) {
-            throw new WebApplicationException(e, Response.status(Response.Status.PRECONDITION_FAILED)
-                    .entity(String.format("Invalid base URI: '%s'", baseUri)).build());
+            // TODO check what the default JAX RS mapper uses for URISyntaxException
+            // nb the lra-proxy-api module wraps it with InvalidLRAStateException
+            // write a test to see what code they end up getting mapped to
+            throw new WebApplicationException(e.getMessage(),
+                    Response.status(Response.Status.PRECONDITION_FAILED)
+                    .entity(String.format("Invalid base URI: '%s'", baseUri))
+                    .build());
         }
 
         status = lra.begin(timelimit);
 
         if (lra.getLRAStatus() == null) {
             // unable to save state, tell the caller to try again later
-            throw new ServiceUnavailableException(LRALogger.i18nLogger.warn_saveState("deactivate"));
+            throw new WebApplicationException(Response.status(SERVICE_UNAVAILABLE)
+                    .entity(LRALogger.i18nLogger.warn_saveState(LongRunningAction.DEACTIVATE_REASON))
+                    .build());
         }
 
         if (status != ActionStatus.RUNNING) {
             lraTrace(lra.getId(), "failed to start LRA");
             lra.finishLRA(true);
 
-            String errorMsg = "Could not start LRA: " + ActionStatus.stringForm(status);
-            throw new InternalServerErrorException(errorMsg,
-                    Response.status(INTERNAL_SERVER_ERROR).entity(errorMsg).build());
+            String errorMsg = "Could not start LRA: " + ActionStatus.stringForm(status);  // TODO use an i18n logger
+
+            throw new WebApplicationException(Response.status(INTERNAL_SERVER_ERROR)
+                    .entity(errorMsg)
+                    .build());
         } else {
             addTransaction(lra);
 
@@ -289,7 +298,7 @@ public class LRAService {
         LongRunningAction transaction = getTransaction(lraId);
 
         if (transaction.getLRAStatus() != LRAStatus.Active && !transaction.isRecovering() && transaction.isTopLevel()) {
-            String errorMsg = String.format("%s: LRA is closing or closed: endLRA", lraId);
+            String errorMsg = String.format("%s: LRA is closing or closed: endLRA", lraId); // TODO use an i18n logger
             throw new WebApplicationException(errorMsg, Response.status(Response.Status.PRECONDITION_FAILED)
                     .entity(errorMsg).build());
         }
@@ -321,6 +330,7 @@ public class LRAService {
         try {
             wasForgotten = transaction.forgetParticipant(compensatorUrl);
         } catch (Exception e) {
+            // TODO use an i18n logger
             String errorMsg = String.format("LRAService.forget %s failed on finding participant '%s'", lraId, compensatorUrl);
             throw new WebApplicationException(errorMsg, e, Response.status(Response.Status.BAD_REQUEST)
                     .entity(errorMsg).build());
@@ -328,6 +338,7 @@ public class LRAService {
         if (wasForgotten) {
             return Response.Status.OK.getStatusCode();
         } else {
+            // TODO use an i18n logger
             String errorMsg = String.format("LRAService.forget %s failed as the participant was not found, compensator url '%s'",
                     lraId, compensatorUrl);
             throw new WebApplicationException(errorMsg, Response.status(Response.Status.BAD_REQUEST)
@@ -410,7 +421,10 @@ public class LRAService {
         String recoveryURI = participant.getRecoveryURI().toASCIIString();
 
         if (!updateRecoveryURI(lra, participant.getParticipantURI(), recoveryURI, false)) {
-            throw new ServiceUnavailableException(LRALogger.i18nLogger.warn_saveState("deactivate"));
+            String msg = LRALogger.i18nLogger.warn_saveState(LongRunningAction.DEACTIVATE_REASON);
+            throw new WebApplicationException(msg, Response.status(SERVICE_UNAVAILABLE)
+                    .entity(msg)
+                    .build());
         }
 
         recoveryUrl.append(recoveryURI);

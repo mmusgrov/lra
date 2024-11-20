@@ -105,15 +105,18 @@ public class LRAParticipantRecord extends AbstractRecord implements Comparable<A
                     if (LRALogger.logger.isTraceEnabled()) {
                         trace_progress(errorMsg);
                     }
-                    throw new WebApplicationException(errorMsg, parseException[0],
-                            Response.status(BAD_REQUEST).entity(errorMsg).build());
+                    throw new WebApplicationException(Response.status(BAD_REQUEST)
+                            .entity(errorMsg)
+                            .build());
                 } else if (compensateURI == null && afterURI == null) {
                     String errorMsg = LRALogger.i18nLogger.error_missingCompensator(lra.getId(), linkURI);
                     LRALogger.logger.error(errorMsg);
                     if (LRALogger.logger.isTraceEnabled()) {
                         trace_progress(errorMsg);
                     }
-                    throw new WebApplicationException(errorMsg, Response.status(BAD_REQUEST).entity(errorMsg).build());
+                    throw new WebApplicationException(Response.status(BAD_REQUEST)
+                            .entity(errorMsg)
+                            .build());
                 }
             } else {
                 this.compensateURI = new URI(String.format("%s/compensate", linkURI));
@@ -143,8 +146,9 @@ public class LRAParticipantRecord extends AbstractRecord implements Comparable<A
                 trace_progress(logMsg);
             }
 
-            throw new WebApplicationException(logMsg, e,
-                    Response.status(BAD_REQUEST).entity(logMsg).build());
+            throw new WebApplicationException(Response.status(BAD_REQUEST)
+                    .entity(logMsg)
+                    .build());
         }
     }
 
@@ -186,6 +190,7 @@ public class LRAParticipantRecord extends AbstractRecord implements Comparable<A
             try {
                 link = Link.valueOf(lnk);
             } catch (IllegalArgumentException e) {
+                // TODO check which http code the default exception mapper uses for URISyntaxException
                 throw new URISyntaxException(lnk, e.getMessage());
             }
 
@@ -1019,10 +1024,9 @@ public class LRAParticipantRecord extends AbstractRecord implements Comparable<A
         Exception e = parseLink(linkStr);
 
         if (e != null) {
-            String errorMsg = LRALogger.i18nLogger.warn_invalid_compensator(e.getMessage(), linkStr);
-
-            throw new WebApplicationException(errorMsg, e,
-                    Response.status(BAD_REQUEST).entity(errorMsg).build());
+            throw new WebApplicationException(Response.status(BAD_REQUEST)
+                    .entity(LRALogger.i18nLogger.warn_invalid_compensator(e.getMessage(), linkStr))
+                    .build());
         }
     }
 
@@ -1032,12 +1036,9 @@ public class LRAParticipantRecord extends AbstractRecord implements Comparable<A
         } catch (URISyntaxException e) {
             String errorMsg = LRALogger.i18nLogger.error_invalidRecoveryUrlToJoinLRAURI(recoveryURI, lraId);
 
-            if (LRALogger.logger.isDebugEnabled()) {
-                LRALogger.logger.debugf(errorMsg);
-            }
-
-            throw new WebApplicationException(errorMsg, e,
-                    Response.status(BAD_REQUEST).entity(errorMsg).build());
+            throw new WebApplicationException(Response.status(BAD_REQUEST)
+                    .entity(errorMsg)
+                    .build());
         }
     }
 

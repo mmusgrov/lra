@@ -178,9 +178,11 @@ public class Coordinator extends Application {
                 requestedLRAStatus = LRAStatus.valueOf(state);
             } catch (IllegalArgumentException e) {
                 String errorMsg = "Status " + state + " is not a valid LRAStatus value";
-                LRALogger.logger.debugf(errorMsg);
-                throw new WebApplicationException(errorMsg, e,
-                        Response.status(BAD_REQUEST).header(NARAYANA_LRA_API_VERSION_HEADER_NAME, version).entity(errorMsg).build());
+                LRALogger.logger.debugf(errorMsg); // TODO use an i18n log message
+                throw new WebApplicationException(Response.status(BAD_REQUEST)
+                        .header(NARAYANA_LRA_API_VERSION_HEADER_NAME, version)
+                        .entity(errorMsg)
+                        .build());
             }
         }
 
@@ -228,9 +230,8 @@ public class Coordinator extends Application {
         @PathParam("LraId")String lraId,
         @HeaderParam(HttpHeaders.ACCEPT) @DefaultValue(MediaType.TEXT_PLAIN) String mediaType,
         @Parameter(ref = LRAConstants.NARAYANA_LRA_API_VERSION_HEADER_NAME)
-        @HeaderParam(LRAConstants.NARAYANA_LRA_API_VERSION_HEADER_NAME) @DefaultValue(CURRENT_API_VERSION_STRING) String version)
-            throws NotFoundException {
-        LongRunningAction transaction = lraService.getTransaction(toURI(lraId)); // throws NotFoundException -> response 404
+        @HeaderParam(LRAConstants.NARAYANA_LRA_API_VERSION_HEADER_NAME) @DefaultValue(CURRENT_API_VERSION_STRING) String version) {
+        LongRunningAction transaction = lraService.getTransaction(toURI(lraId));
         LRAStatus status = transaction.getLRAStatus();
 
         if (status == null) {
@@ -323,7 +324,7 @@ public class Coordinator extends Application {
             @QueryParam(PARENT_LRA_PARAM_NAME) @DefaultValue("") String parentLRA,
             @HeaderParam(HttpHeaders.ACCEPT) @DefaultValue(MediaType.TEXT_PLAIN) String mediaType,
             @Parameter(ref = LRAConstants.NARAYANA_LRA_API_VERSION_HEADER_NAME)
-            @HeaderParam(LRAConstants.NARAYANA_LRA_API_VERSION_HEADER_NAME) @DefaultValue(CURRENT_API_VERSION_STRING) String version) throws WebApplicationException {
+            @HeaderParam(LRAConstants.NARAYANA_LRA_API_VERSION_HEADER_NAME) @DefaultValue(CURRENT_API_VERSION_STRING) String version) {
 
         URI parentId = (parentLRA == null || parentLRA.trim().isEmpty()) ? null : toURI(parentLRA);
         String coordinatorUrl = String.format("%s%s", context.getBaseUri(), COORDINATOR_PATH_NAME);
@@ -351,12 +352,15 @@ public class Coordinator extends Application {
                         }
                     }
                 } catch (Exception e) {
-                    String errorMsg = String.format("Cannot contact the LRA Coordinator at '%s' for LRA '%s' joining parent LRA '%s'",
+                    String errorMsg = String.format(
+                            "Cannot contact the LRA Coordinator at '%s' for LRA '%s' joining parent LRA '%s'",
                             parentId, lraId, parentLRA);
-                    LRALogger.logger.debugf(errorMsg);
-                    throw new WebApplicationException(errorMsg, e,
-                            Response.status(INTERNAL_SERVER_ERROR).header(NARAYANA_LRA_API_VERSION_HEADER_NAME, version)
-                                    .entity(errorMsg).build());
+                    LRALogger.logger.debugf(errorMsg); // TODO use an i18n log message
+                    // don't include the root exception (it should already be in the server side logs):
+                    throw new WebApplicationException(Response.status(INTERNAL_SERVER_ERROR)
+                            .header(NARAYANA_LRA_API_VERSION_HEADER_NAME, version)
+                            .entity(errorMsg)
+                            .build());
                 }
             }
         }
@@ -421,8 +425,9 @@ public class Coordinator extends Application {
         if (status == null || lra.getLRAStatus() == null) {
             String logMsg = LRALogger.i18nLogger.error_cannotGetStatusOfNestedLraURI(nestedLraId, lra.getId());
             LRALogger.logger.debug(logMsg);
-            throw new WebApplicationException(logMsg,
-                    Response.status(Response.Status.PRECONDITION_FAILED).entity(logMsg).build());
+            throw new WebApplicationException(Response.status(PRECONDITION_FAILED)
+                    .entity(logMsg)
+                    .build());
         }
 
         return Response.ok(mapToParticipantStatus(lra.getLRAStatus()).name()).build();
@@ -437,7 +442,15 @@ public class Coordinator extends Application {
             case Cancelling: return ParticipantStatus.Compensating;
             case FailedToClose: return ParticipantStatus.FailedToComplete;
             case FailedToCancel: return ParticipantStatus.FailedToCompensate;
-            default: throw new RuntimeException("Invalid LRAStatus enum value: " + lraStatus);
+            default:
+                // the status has been provided by a nested coordinator which we don't necessarily control
+                // - it's not a client error but a problem with the remote server so we have no other option
+                // than to report it as an internal error:
+                String errMsg = String.format("Remote coordinator produced an invalid LRAStatus enum value: %s",
+                        lraStatus); // TODO use an i18n log message because it means the environment is misconfigured
+                throw new WebApplicationException(Response.status(INTERNAL_SERVER_ERROR)
+                        .entity(errMsg)
+                        .build());
         }
     }
 
@@ -509,9 +522,18 @@ public class Coordinator extends Application {
             @HeaderParam(LRAConstants.NARAYANA_LRA_PARTICIPANT_LINK_HEADER_NAME) @DefaultValue("") String compensator,
             @HeaderParam(LRAConstants.NARAYANA_LRA_PARTICIPANT_DATA_HEADER_NAME) @DefaultValue("") String userData) {
 
-        LRAData lraData = lraService.endLRA(toURI(lraId), false, false, compensator, userData);
+        try {
+            LRAData lraData = lraService.endLRA(toURI(lraId), false, false, compensator, userData);
 
-        return buildResponse(lraData.getStatus().name(), version, mediaType);
+            return buildResponse(lraData.getStatus().name(), version, mediaType);
+        } catch (WebApplicationException e) {
+            // TODO wrap the others so the caller sees the root cause (don't know why the information is lost)
+            // otherwise the caller just sees a generic message corresponding to e.getResponse().getStatus()
+            // eg for a 503 it would be "Service Unavailable"
+            // and if we throw new WebApplicationException(e.getMessage(), e);
+            // then the caller sees the generic 500 Internal Server Error code rather than the specific 503 code
+            return Response.status(e.getResponse().getStatus()).entity(e.getMessage()).build();
+        }
     }
 
     @PUT
@@ -539,12 +561,15 @@ public class Coordinator extends Application {
         @Parameter(ref = LRAConstants.NARAYANA_LRA_API_VERSION_HEADER_NAME)
         @HeaderParam(LRAConstants.NARAYANA_LRA_API_VERSION_HEADER_NAME) @DefaultValue(CURRENT_API_VERSION_STRING) String version,
         @HeaderParam(LRAConstants.NARAYANA_LRA_PARTICIPANT_LINK_HEADER_NAME) @DefaultValue("") String compensator,
-        @HeaderParam(LRAConstants.NARAYANA_LRA_PARTICIPANT_DATA_HEADER_NAME) @DefaultValue("") String userData)
-            throws NotFoundException {
+        @HeaderParam(LRAConstants.NARAYANA_LRA_PARTICIPANT_DATA_HEADER_NAME) @DefaultValue("") String userData) {
 
         LRAData lraData = lraService.endLRA(toURI(lraId), true, false, compensator, userData);
 
-        return buildResponse(lraData.getStatus().name(), version, mediaType);
+        try {
+            return buildResponse(lraData.getStatus().name(), version, mediaType);
+        } catch (NotFoundException e) {
+            return Response.status(e.getResponse().getStatus()).entity(e.getMessage()).build();
+        }
     }
 
     @PUT
@@ -598,17 +623,17 @@ public class Coordinator extends Application {
             @RequestBody(name = "Compensator data",
                 description = "A compensator can also register with an LRA by putting the compensator end "
                     + "points in the body of request as a link header. This feature is deprecated and undocumented "
-                    + "and will be removed in a later version of the protocol") String compensatorURL) throws NotFoundException {
+                    + "and will be removed in a later version of the protocol") String compensatorURL) {
 
         // test to see if the join request contains any participant specific data
         if (userData != null && !userData.isEmpty() && !isAllowParticipantData(version)) {
             String logMsg = LRALogger.i18nLogger.error_participant_data_disallowed(lraId);
             LRALogger.logger.error(logMsg);
 
-            throw new WebApplicationException(logMsg,
-                    Response.status(PRECONDITION_FAILED).entity(logMsg)
-                            .header(NARAYANA_LRA_API_VERSION_HEADER_NAME, version)
-                            .build());
+            throw new WebApplicationException(Response.status(PRECONDITION_FAILED)
+                    .entity(logMsg)
+                    .header(NARAYANA_LRA_API_VERSION_HEADER_NAME, version)
+                    .build());
         }
 
         // test to see if the compensator endpoints are in the body of the join request
@@ -687,8 +712,7 @@ public class Coordinator extends Application {
     }
 
     private Response joinLRA(URI lraId, String acceptMediaType, long timeLimit, String linkHeader,
-                             StringBuilder userData, String version)
-            throws NotFoundException {
+                             StringBuilder userData, String version) {
         final String recoveryUrlBase = String.format("%s%s/%s",
                 context.getBaseUri().toASCIIString(), COORDINATOR_PATH_NAME, RECOVERY_COORDINATOR_PATH_NAME);
 
@@ -723,11 +747,11 @@ public class Coordinator extends Application {
                     .build();
         } catch (URISyntaxException e) {
             String logMsg = LRALogger.i18nLogger.error_invalidRecoveryUrlToJoinLRAURI(recoveryUrl.toString(), lraId);
-            LRALogger.logger.error(logMsg);
-            throw new WebApplicationException(logMsg, e,
-                    Response.status(INTERNAL_SERVER_ERROR).entity(logMsg)
-                            .header(NARAYANA_LRA_API_VERSION_HEADER_NAME, version)
-                            .build());
+            LRALogger.logger.error(logMsg); // TODO make sure all WebApplicationExceptions are also reported in the logs
+            throw new WebApplicationException(Response.status(BAD_REQUEST)
+                    .entity(logMsg)
+                    .header(NARAYANA_LRA_API_VERSION_HEADER_NAME, version)
+                    .build());
         }
     }
     /**
@@ -756,7 +780,7 @@ public class Coordinator extends Application {
             @HeaderParam(HttpHeaders.ACCEPT) @DefaultValue(MediaType.TEXT_PLAIN) String mediaType,
             @Parameter(ref = LRAConstants.NARAYANA_LRA_API_VERSION_HEADER_NAME)
             @HeaderParam(LRAConstants.NARAYANA_LRA_API_VERSION_HEADER_NAME) @DefaultValue(CURRENT_API_VERSION_STRING) String version,
-            String participantCompensatorUrl) throws NotFoundException {
+            String participantCompensatorUrl) {
         int status = lraService.leave(toURI(lraId), participantCompensatorUrl);
 
         return Response.status(status)
@@ -764,7 +788,7 @@ public class Coordinator extends Application {
                 .build();
     }
 
-    private Response buildResponse(String status, String apiVersion, String mediaType) throws NotFoundException {
+    private Response buildResponse(String status, String apiVersion, String mediaType) {
         if (mediaType.equals(MediaType.APPLICATION_JSON)) {
             JsonObject model = Json.createObjectBuilder()
                     .add("status", status)
@@ -793,8 +817,9 @@ public class Coordinator extends Application {
             } catch (MalformedURLException e1) {
                 String logMsg = LRALogger.i18nLogger.error_invalidStringFormatOfUrl(lraId, e1);
                 LRALogger.logger.error(logMsg);
-                throw new WebApplicationException(logMsg, e1,
-                        Response.status(BAD_REQUEST).entity(logMsg).build());
+                throw new WebApplicationException(Response.status(BAD_REQUEST)
+                        .entity(logMsg)
+                        .build());
             }
         }
 
@@ -802,9 +827,10 @@ public class Coordinator extends Application {
             return url.toURI();
         } catch (URISyntaxException e) {
             String logMsg = LRALogger.i18nLogger.error_invalidStringFormatOfUrl(lraId, e);
-            LRALogger.logger.error(logMsg);
-            throw new WebApplicationException(logMsg, e,
-                    Response.status(BAD_REQUEST).entity(logMsg).build());
+            LRALogger.logger.error(logMsg); // TODO check that we use a consistent set of i18n messages - ie some are quite similar
+            throw new WebApplicationException(Response.status(BAD_REQUEST)
+                    .entity(logMsg)
+                    .build());
         }
     }
 }

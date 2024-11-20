@@ -81,6 +81,7 @@ import static jakarta.ws.rs.core.Response.Status.NO_CONTENT;
 import static jakarta.ws.rs.core.Response.Status.OK;
 import static jakarta.ws.rs.core.Response.Status.PRECONDITION_FAILED;
 
+import static jakarta.ws.rs.core.Response.Status.SERVICE_UNAVAILABLE;
 import static org.eclipse.microprofile.lra.annotation.ws.rs.LRA.LRA_HTTP_RECOVERY_HEADER;
 
 /**
@@ -170,7 +171,7 @@ public class NarayanaLRAClient implements Closeable {
     public NarayanaLRAClient(String coordinatorUrl) {
         try {
             this.coordinatorUrl = new URI(coordinatorUrl);
-        } catch (URISyntaxException use) {
+        } catch (URISyntaxException use) { // TODO use an i18n logger
             throw new IllegalStateException("Cannot convert the provided coordinator url String "
                     + coordinatorUrl + " to URL format", use);
         }
@@ -185,6 +186,7 @@ public class NarayanaLRAClient implements Closeable {
      */
     public void setCurrentLRA(URI lraId) {
         try {
+            // TODO callers normally rely on WebApplicationException hierarchy so check what IllegalStateException maps to
             this.coordinatorUrl = LRAConstants.getLRACoordinatorUrl(lraId);
         } catch (IllegalStateException e) {
             String logMsg = LRALogger.i18nLogger.error_invalidLraIdFormatToConvertToCoordinatorUrl(lraId.toASCIIString(), e);
@@ -205,14 +207,16 @@ public class NarayanaLRAClient implements Closeable {
                 .get(QUERY_TIMEOUT, TimeUnit.SECONDS);
 
             if (response.getStatus() != OK.getStatusCode()) {
+                // TODO use an i18n logger
                 LRALogger.logger.debugf("Error getting all LRAs from the coordinator, response status: %d", response.getStatus());
                 throw new WebApplicationException(response);
             }
 
             return response.readEntity(new GenericType<List<LRAData>>() {});
         } catch (InterruptedException | ExecutionException | TimeoutException e) {
-            throw new WebApplicationException("getAllLRAs client request timed out, try again later",
-                    Response.Status.SERVICE_UNAVAILABLE.getStatusCode());
+            // TODO use an i18n logger
+            throw new WebApplicationException(Response.status(SERVICE_UNAVAILABLE)
+                    .entity("getAllLRAs client request timed out, try again later").build());
         } finally {
             if (client != null) {
                 client.close();
@@ -313,15 +317,13 @@ public class NarayanaLRAClient implements Closeable {
 
             // validate the HTTP status code says an LRA resource was created
             if (isUnexpectedResponseStatus(response, Response.Status.CREATED)) {
-                String responseEntity = response.hasEntity() ? response.readEntity(String.class) : "";
-                String logMsg = LRALogger.i18nLogger.error_lraCreationUnexpectedStatus(response.getStatus(), responseEntity);
                 if (verbose) {
-                    LRALogger.logger.error(logMsg);
+                    // remark we don't read the entity here since that would close it but the client needs to read it
+                    LRALogger.logger.error(
+                            LRALogger.i18nLogger.error_lraCreationUnexpectedStatus(response.getStatus(), ""));
                 }
-                throwGenericLRAException(null, response.getStatus(), // Remark the catch block already catches this one
-                        logMsg, null);
-
-                return null;
+                // let the client know the reason for the failure (it's in the entity body of the response object)
+                throw new WebApplicationException(response);
             }
 
             lra = URI.create(response.getHeaderString(HttpHeaders.LOCATION));
@@ -336,13 +338,11 @@ public class NarayanaLRAClient implements Closeable {
             if (verbose) {
                 LRALogger.logger.error(logMsg);
             }
-            throwGenericLRAException(null, INTERNAL_SERVER_ERROR.getStatusCode(),
-                    logMsg, uee);
-            return null;
+            throw new WebApplicationException(Response.status(INTERNAL_SERVER_ERROR).entity(logMsg).build());
         } catch (InterruptedException | ExecutionException | TimeoutException e) {
-            LRALogger.i18nLogger.warn_startLRAFailed(e.getMessage(), e);
-            throw new WebApplicationException("start LRA client request failed, try again later", e,
-                    Response.Status.SERVICE_UNAVAILABLE.getStatusCode());
+            String errMsg = LRALogger.i18nLogger.warn_startLRAFailed(e.getMessage());
+            LRALogger.logger.warn(errMsg, e);
+            throw new WebApplicationException(Response.status(SERVICE_UNAVAILABLE).entity(errMsg).build());
         } finally {
             if (client != null) {
                 client.close();
@@ -439,8 +439,9 @@ public class NarayanaLRAClient implements Closeable {
                 throwGenericLRAException(null, response.getStatus(), logMsg, null);
             }
         } catch (InterruptedException | ExecutionException | TimeoutException e) {
-            throw new WebApplicationException("leave LRA client request timed out, try again later",
-                    Response.Status.SERVICE_UNAVAILABLE.getStatusCode());
+            throw new WebApplicationException(Response
+                    .status(SERVICE_UNAVAILABLE)
+                    .entity("leave LRA client request timed out, try again later").build()); // TODO use an i18n logger
         } finally {
             if (client != null) {
                 client.close();
@@ -601,11 +602,9 @@ public class NarayanaLRAClient implements Closeable {
                 .get()
                 .get(QUERY_TIMEOUT, TimeUnit.SECONDS);
 
+            // TODO add tests for each of these checks
             if (response.getStatus() == NOT_FOUND.getStatusCode()) {
-                String responseEntity = response.hasEntity() ? response.readEntity(String.class) : "";
-                String errorMsg = "The requested LRA it '" + lraId + "' was not found and the status can't be obtained, "
-                        + "response content: " + responseEntity;
-                throw new NotFoundException(errorMsg, Response.status(NOT_FOUND).entity(errorMsg).build());
+                throw new NotFoundException(response);
             }
 
             if (response.getStatus() == NO_CONTENT.getStatusCode()) {
@@ -615,49 +614,34 @@ public class NarayanaLRAClient implements Closeable {
             if (response.getStatus() != OK.getStatusCode()) {
                 String logMsg = LRALogger.i18nLogger.error_invalidStatusCode(coordinatorUrl, response.getStatus(), lraId);
                 LRALogger.logger.error(logMsg);
-                throwGenericLRAException(uri, response.getStatus(),
-                        logMsg, null);
+                throw new WebApplicationException(response);
             }
 
             if (!response.hasEntity()) {
+                // can't happen since the coordinator returned OK
                 String logMsg = LRALogger.i18nLogger.error_noContentOnGetStatus(coordinatorUrl, lraId);
                 LRALogger.logger.error(logMsg);
-                throwGenericLRAException(uri, Response.Status.INTERNAL_SERVER_ERROR.getStatusCode(),
-                        logMsg, null);
+                throw new WebApplicationException(
+                        Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(logMsg).build());
             }
 
             // convert the returned String into a status
             try {
-                return fromString(response.readEntity(String.class));
-            } catch (IllegalArgumentException iae) {
-                String logMsg = LRALogger.i18nLogger.error_invalidArgumentOnStatusFromCoordinator(coordinatorUrl, lraId, iae);
+                return LRAStatus.valueOf(response.readEntity(String.class));
+            } catch (IllegalArgumentException e) {
+                String logMsg = LRALogger.i18nLogger.error_invalidArgumentOnStatusFromCoordinator(coordinatorUrl,
+                        lraId);
                 LRALogger.logger.error(logMsg);
-                throwGenericLRAException(uri,Response.Status.INTERNAL_SERVER_ERROR.getStatusCode(),
-                        logMsg, iae);
+                throw new WebApplicationException(Response.status(INTERNAL_SERVER_ERROR).entity(logMsg).build());
             }
         } catch (InterruptedException | ExecutionException | TimeoutException e) {
-            throw new WebApplicationException("get LRA status client request timed out, try again later",
-                    Response.Status.SERVICE_UNAVAILABLE.getStatusCode());
+            throw new WebApplicationException(Response.status(SERVICE_UNAVAILABLE)
+                    .entity("get LRA status client request timed out, try again later").build()); // TODO use an i18n logger
         } finally {
             if (client != null) {
                 client.close();
             }
         }
-
-        return null;
-    }
-
-    /**
-     *
-     * @param status the string that is to be converted to a CompensatorStatus
-     * @return the corresponding status or empty
-     * @throws IllegalArgumentException if the status is not a valid enum constant
-     */
-    private static LRAStatus fromString(String status) {
-        if (status == null) {
-            throw new IllegalArgumentException("The status parameter is null");
-        }
-        return LRAStatus.valueOf(status);
     }
 
     private static StringBuilder makeLink(StringBuilder b, String uriPrefix, String key, String value) {
@@ -781,8 +765,8 @@ public class NarayanaLRAClient implements Closeable {
                 }
             // don't catch WebApplicationException, just let it propagate
             } catch (InterruptedException | ExecutionException | TimeoutException e) {
-                throw new WebApplicationException("join LRA client request timed out, try again later",
-                        Response.Status.SERVICE_UNAVAILABLE.getStatusCode());
+                throw new WebApplicationException(Response.status(SERVICE_UNAVAILABLE)
+                        .entity("join LRA client request timed out, try again later").build());
             }
         } finally {
             if (client != null) {
@@ -809,26 +793,24 @@ public class NarayanaLRAClient implements Closeable {
                     .header(NARAYANA_LRA_PARTICIPANT_DATA_HEADER_NAME, userData)
                     .async()
                     .put(Entity.text(""))
-                    .get(END_TIMEOUT, TimeUnit.SECONDS);
+                    .get(END_TIMEOUT*100, TimeUnit.SECONDS);
             } catch (InterruptedException | ExecutionException | TimeoutException e) {
-                throw new WebApplicationException("end LRA client request timed out, try again later",
-                        Response.Status.SERVICE_UNAVAILABLE.getStatusCode());
+                throw new WebApplicationException(Response.status(SERVICE_UNAVAILABLE)
+                        .entity("end LRA client request timed out, try again later")
+                        .build());
             }
 
+            if (response == null) {
+                System.out.printf("XXXXXX TODO%n");
+                throw new Error("debug: null response");
+            }
             if (isUnexpectedResponseStatus(response, OK, Response.Status.ACCEPTED, NOT_FOUND)) {
-                String warnMsg = LRALogger.i18nLogger.error_lraTerminationUnexpectedStatus(response.getStatus(),
-                        response.hasEntity() ? response.readEntity(String.class) : "");
-
-                LRALogger.logger.warn(warnMsg);
-                throwGenericLRAException(lra, INTERNAL_SERVER_ERROR.getStatusCode(), warnMsg, null);
+                // let the client know the reason for the failure (it's in the entity body of the response object)
+                throw new WebApplicationException(response);
             }
 
             if (response.getStatus() == NOT_FOUND.getStatusCode()) {
-                String errorMsg = LRALogger.i18nLogger.get_couldNotCompleteCompensateOnReturnedStatus(
-                        confirm ? "close" : "compensate", lra, coordinatorUrl, NOT_FOUND.getReasonPhrase());
-                LRALogger.logger.info(errorMsg);
-                throw new NotFoundException(errorMsg,
-                        Response.status(NOT_FOUND).entity(lra.toASCIIString()).build());
+                throw new WebApplicationException(response);
             }
 
         } finally {

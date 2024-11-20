@@ -6,6 +6,7 @@
 package io.narayana.lra.coordinator.api;
 
 import io.narayana.lra.LRAData;
+import io.narayana.lra.coordinator.domain.model.LongRunningAction;
 import io.narayana.lra.coordinator.domain.service.LRAService;
 import io.narayana.lra.coordinator.internal.LRARecoveryModule;
 import io.narayana.lra.logging.LRALogger;
@@ -36,6 +37,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.List;
 
+import static jakarta.ws.rs.core.Response.Status.BAD_REQUEST;
 import static jakarta.ws.rs.core.Response.Status.INTERNAL_SERVER_ERROR;
 import static jakarta.ws.rs.core.Response.Status.NOT_FOUND;
 import static jakarta.ws.rs.core.Response.Status.PRECONDITION_FAILED;
@@ -74,7 +76,9 @@ public class RecoveryCoordinator {
         if (compensatorUrl == null) {
             String errorMsg = LRALogger.i18nLogger.warn_cannotFoundCompensatorUrl(rcvCoordId, lraId);
             LRALogger.logger.warn(errorMsg);
-            throw new NotFoundException(errorMsg, Response.status(NOT_FOUND).entity(errorMsg).build());
+            throw new WebApplicationException(Response.status(NOT_FOUND)
+                    .entity(errorMsg)
+                    .build());
         }
 
         return compensatorUrl;
@@ -114,14 +118,16 @@ public class RecoveryCoordinator {
                 lra = new URI(lraId);
             } catch (URISyntaxException e) {
                 LRALogger.i18nLogger.error_invalidFormatOfLraIdReplacingCompensatorURI(lraId, compensatorUrl, e);
-                String errMsg = String.format("%s: %s", lraId, e.getMessage());
-                throw new WebApplicationException(errMsg, e,
-                        Response.status(INTERNAL_SERVER_ERROR.getStatusCode()).entity(errMsg).build());
+                String errMsg = String.format("%s: %s", lraId, e.getMessage()); // TODO check coordinator responses use the i18n logger
+                throw new WebApplicationException(Response.status(BAD_REQUEST)
+                        .entity(errMsg)
+                        .build());
             }
 
             if (!lraService.updateRecoveryURI(lra, newCompensatorUrl, context, true)) {
                 // TODO add a test for it
-                throw new ServiceUnavailableException(LRALogger.i18nLogger.warn_saveState("deactivate"));
+                throw new ServiceUnavailableException(
+                        LRALogger.i18nLogger.warn_saveState(LongRunningAction.DEACTIVATE_REASON));
             }
 
             return context;
@@ -129,7 +135,9 @@ public class RecoveryCoordinator {
 
         String errorMsg = LRALogger.i18nLogger.warn_cannotFoundCompensatorUrl(rcvCoordId, lraId);
         LRALogger.logger.warn(errorMsg);
-        throw new NotFoundException(errorMsg, Response.status(NOT_FOUND).entity(errorMsg).build());
+        throw new WebApplicationException(Response.status(NOT_FOUND)
+                .entity(errorMsg)
+                .build());
     }
 
     @GET

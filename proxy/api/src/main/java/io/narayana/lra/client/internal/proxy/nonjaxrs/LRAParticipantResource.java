@@ -97,7 +97,8 @@ public class LRAParticipantResource {
         LRAParticipant participant = lraParticipantRegistry.getParticipant(participantId);
         if (participant == null) {
             throw new WebApplicationException(Response.status(Response.Status.NOT_FOUND).
-                    entity(participantId + ": Cannot find participant in LRA registry").build());
+                    entity(participantId + ": Cannot find participant in LRA registry")
+                    .build()); // TODO use an i18n logger
         }
         return participant;
     }

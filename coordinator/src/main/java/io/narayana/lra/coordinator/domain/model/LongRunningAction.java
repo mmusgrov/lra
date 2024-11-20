@@ -47,10 +47,12 @@ import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 
+import static jakarta.ws.rs.core.Response.Status.INTERNAL_SERVER_ERROR;
+
 public class LongRunningAction extends BasicAction {
     private static final String LRA_TYPE = "/StateManager/BasicAction/LongRunningAction";
     private static final ScheduledExecutorService scheduler = new ScheduledThreadPoolExecutor(10);
-    private static final String DEACTIVATE_REASON = "deactivate";
+    public static final String DEACTIVATE_REASON = "deactivate failed";
     private URI id;
     private URI parentId;
     private String clientId;
@@ -67,8 +69,11 @@ public class LongRunningAction extends BasicAction {
 
         if (lraService == null) {
             // all callers of this constructor pass in a non-null value
-            // but if any future change to the code does pass in null then throw an error
-            throw new Error(LRALogger.i18nLogger.error_invalidArgument("null LRAService"));
+            // but the call was instigated by a client so report it as an internal problem
+            throw new WebApplicationException(Response.status(INTERNAL_SERVER_ERROR)
+                    .entity(LRALogger.i18nLogger.error_invalidArgument("null LRAService"))
+                    .build());
+
         }
 
         this.lraService = lraService;
@@ -94,8 +99,10 @@ public class LongRunningAction extends BasicAction {
 
         if (lraService == null) {
             // all callers of this constructor pass in a non-null value
-            // but if any future change to the code does pass in null then throw an error
-            throw new Error(LRALogger.i18nLogger.error_invalidArgument("null LRAService"));
+            // but the call was instigated by a client so report it as an internal problem
+            throw new WebApplicationException(Response.status(INTERNAL_SERVER_ERROR)
+                    .entity(LRALogger.i18nLogger.error_invalidArgument("null LRAService"))
+                    .build());
         }
 
         this.lraService = lraService;
@@ -839,8 +846,7 @@ public class LongRunningAction extends BasicAction {
         endStateCheck();
 
         if (isFinished()) {
-            throw new WebApplicationException(
-                    Response.status(Response.Status.GONE)
+            throw new WebApplicationException(Response.status(Response.Status.GONE)
                             .entity(LRALogger.i18nLogger.error_tooLateToJoin(id.toASCIIString(), "finished"))
                             .build());
         }
@@ -848,13 +854,14 @@ public class LongRunningAction extends BasicAction {
         if (add(p) != AddOutcome.AR_REJECTED) {
             if (setTimeLimit(timeLimit, true) != Response.Status.OK.getStatusCode()) {
                 // there is no remove(p) so just issue a warning - but note that the caller will also try to
-                // save the state so the time limit will be written then or else it will
-                // throw new ServiceUnavailableException
+                // save the state so the time limit will be written then or else it will report it using
+                // 503 Service Unavailable (an instance of ServiceUnavailableException)
                 LRALogger.logger.warn(
                         LRALogger.i18nLogger.warn_saveState("could not durably record the new time limit"));
             }
 
             if (LRALogger.logger.isTraceEnabled()) {
+                // TODO are these trace statements are useful
                 trace_progress("enlisted " + p.getParticipantPath());
             }
 
@@ -1027,7 +1034,7 @@ public class LongRunningAction extends BasicAction {
             case FailedToClose:
                 return Response.Status.PRECONDITION_FAILED.getStatusCode(); // 412, probably not the correct code
             default:
-                return Response.Status.INTERNAL_SERVER_ERROR.getStatusCode(); // 500
+                return INTERNAL_SERVER_ERROR.getStatusCode(); // 500
         }
     }
 

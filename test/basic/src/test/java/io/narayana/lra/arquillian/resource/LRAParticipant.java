@@ -78,6 +78,10 @@ public class LRAParticipant {
             validateLRAIsNotActive(lraClient.getStatus(lra2));
         } catch (NotFoundException ignore) {
             // LRA is not active
+        } catch (WebApplicationException e) {
+            if (e.getResponse().getStatus() != Response.Status.NOT_FOUND.getStatusCode()) {
+                throw e;
+            } // else LRA is not active
         }
 
         // the original LRA (lra1) will still be active (because of the end = false attribute)

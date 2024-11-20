@@ -6,6 +6,7 @@
 package io.narayana.lra.client.internal.proxy;
 
 public class InvalidLRAStateException extends Exception {
+    // TODO what HTTP status code does this map to
     InvalidLRAStateException() {
         this("Invalid state");
     }

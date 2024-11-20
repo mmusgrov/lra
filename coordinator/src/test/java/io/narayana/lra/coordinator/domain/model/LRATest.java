@@ -6,6 +6,7 @@
 package io.narayana.lra.coordinator.domain.model;
 
 import static io.narayana.lra.LRAConstants.COORDINATOR_PATH_NAME;
+import static jakarta.ws.rs.core.Response.Status.NOT_FOUND;
 import static jakarta.ws.rs.core.Response.Status.OK;
 import static org.eclipse.microprofile.lra.annotation.ws.rs.LRA.LRA_HTTP_CONTEXT_HEADER;
 import static org.eclipse.microprofile.lra.annotation.ws.rs.LRA.LRA_HTTP_RECOVERY_HEADER;
@@ -143,13 +144,19 @@ public class LRATest extends LRATestBase {
         server.deployOldStyle(LRAParticipant.class);
 
         service = LRARecoveryModule.getService();
+
         assertNull(testName + ": current thread should not be associated with any LRAs", lraClient.getCurrent());
     }
 
     @After
     public void after() {
-        assertNull(testName + ": current thread should not be associated with any LRAs", lraClient.getCurrent());
         LRALogger.logger.debugf("Finished test %s", testName);
+
+        if (lraClient.getCurrent() != null) {
+            lraClient.clearCurrent(false); // otherwise it will interfere with subsequent tests
+            fail(testName + ": current thread should not be associated with any LRAs");
+        }
+
         lraClient.close();
         client.close();
         clearObjectStore(testName);
@@ -1125,7 +1132,7 @@ public class LRATest extends LRATestBase {
             assertTrue("Expected at least one AfterLRA notifications", notificationsBeforeRecovery > 0);
 
             // verify that the coordinator still regards the LRA as finished even though there are still listeners
-            LRAStatus status = lraClient.getStatus(lraId);
+            LRAStatus status = getStatus(lraId);
             assertEquals("LRA should be in the closed state, not " + status, LRAStatus.Closed, status);
 
             // trigger a recovery scan so that the coordinator redelivers the listener notification which can take
@@ -1153,7 +1160,8 @@ public class LRATest extends LRATestBase {
             } catch (NotFoundException ignore) {
                 ; // success the LRA is gone as expected
             } catch (WebApplicationException e) {
-                fail("status of LRA unavailable: " + e.getMessage());
+                assertEquals("status of LRA unavailable: " + e.getMessage(),
+                        NOT_FOUND.getStatusCode(), e.getResponse().getStatus());
             }
         }
     }
@@ -1168,8 +1176,15 @@ public class LRATest extends LRATestBase {
         try {
             client.target(TestPortProvider.generateURL("/base/test/start")).request().get(String.class);
             fail("expected ServiceUnavailableException on startLRA");
-        } catch (ServiceUnavailableException ignore) {
+        } catch (ServiceUnavailableException e) {
             // expected since the byteman script fails the attempt to write to the store
+            Response response = e.getResponse();
+            assertNotNull("missing response object", response);
+            // the response should be 503
+            assertEquals(503, response.getStatus());
+            assertTrue(response.hasEntity());
+            String message = response.readEntity(String.class);
+            assertTrue(message.contains("LRA025032")); // TODO the error messages are too expansive
         }
 
         // verify that nothing was written to the store
@@ -1202,6 +1217,61 @@ public class LRATest extends LRATestBase {
         }
     }
 
+    @Test
+    @BMRules(rules={
+            // a rule to fail store writes when an LRA participant is being enlisted
+            @BMRule(name = "fail deactivate during close",
+                    targetClass = "io.narayana.lra.coordinator.domain.model.LongRunningAction",
+                    targetMethod = "updateState(LRAStatus, boolean)",
+                    targetLocation = "AFTER INVOKE deactivate",
+                    action = "$! = false;" )
+    })
+    public void testCloseFailure() {
+        testEndFailure(true);
+    }
+
+    @Test
+    @BMRules(rules={
+            // a rule to fail store writes when an LRA participant is being enlisted
+            @BMRule(name = "fail deactivate during close",
+                    targetClass = "io.narayana.lra.coordinator.domain.model.LongRunningAction",
+                    targetMethod = "updateState(LRAStatus, boolean)",
+                    targetLocation = "AFTER INVOKE deactivate",
+                    action = "$! = false;" )
+    })
+    public void testCancelFailure() {
+        testEndFailure(true);
+    }
+
+    public void testEndFailure(boolean closeLRA) {
+        // start an LRA by calling the coordinator
+        URI lraId = lraClient.startLRA(testName.getMethodName());
+
+        // enlist a participant via the participant filter (ie ServerLRAFilter)
+        try (Response r = client.target(TestPortProvider.generateURL("/base/participant1/continue"))
+                .request()
+                .header(LRA_HTTP_CONTEXT_HEADER, lraId).get()) { // invoke the service, setting the LRA context
+            assertEquals(200, r.getStatus());
+        }
+
+        try {
+            // close/cancel the LRA by calling the coordinator
+            if (closeLRA) {
+                lraClient.closeLRA(lraId);
+            } else {
+                lraClient.cancelLRA(lraId);
+            }
+        } catch (WebApplicationException e) {
+            Response response = e.getResponse();
+            assertNotNull("missing response object", response);
+            // the response should be 503
+            assertEquals(503, response.getStatus());
+            assertTrue(response.hasEntity());
+            String message = response.readEntity(String.class);
+            assertTrue(message.contains("LRA025032"));
+        }
+    }
+
     /*
      * Service A - Timeout 500 ms Service B (Type.MANDATORY)
      * Service A calls Service B after it has waited 1 sec. Service A returns http Status from the call to Service B.
@@ -1209,8 +1279,9 @@ public class LRATest extends LRATestBase {
      * The test calls A and verifies if return is status 412 (precondition failed) or 410 (gone) since LRA is not
      * active when Service B endpoint is called.
      */
+    // TODO this method is slow because of the sleeps - change it to use byteman
     @Test
-    public void timeLimitWithPreConditionFailed() {
+    public void testTimeLimitWithPreConditionFailed() {
         try (Response response = client.target(TestPortProvider.generateURL("/base/test/time-limit2")).request().get()) {
 
             assertThat("Expected 412 or 410 response", response.getStatus(),
@@ -1259,6 +1330,10 @@ public class LRATest extends LRATestBase {
             return lraClient.getStatus(lra);
         } catch (NotFoundException ignore) {
             return null;
+        } catch (WebApplicationException e) {
+            assertNotNull(e);
+            assertEquals(e.getResponse().getStatus(), NOT_FOUND.getStatusCode());
+            return null;
         }
     }
 
@@ -1271,10 +1346,17 @@ public class LRATest extends LRATestBase {
     }
 
     private void assertStatus(String message, URI lraId, LRAStatus ... expectedValues) {
+        try {
             LRAStatus status = getStatus(lraId);
 
             assertTrue(message + ": LRA status: " + status,
                     Arrays.stream(expectedValues).anyMatch(s -> s == status));
+        } catch (NotFoundException e) {
+            List<LRAStatus> values = Arrays.asList(expectedValues);
+            // if the LRA finished then the coordinator is free to clean up so NotFoundException is valid
+            assertTrue(values.contains(LRAStatus.Closed)
+                    || values.contains(LRAStatus.Cancelled)); // what about FailedToXXX
+        }
     }
 
     private void assertStatus(String lraId, LRAStatus expected, boolean nullValid) {
