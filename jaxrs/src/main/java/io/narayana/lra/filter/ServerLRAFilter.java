@@ -63,6 +63,7 @@ import static io.narayana.lra.LRAConstants.FORGET;
 import static io.narayana.lra.LRAConstants.LEAVE;
 import static io.narayana.lra.LRAConstants.STATUS;
 import static io.narayana.lra.LRAConstants.TIMELIMIT_PARAM_NAME;
+import static jakarta.ws.rs.core.Response.Status.NOT_FOUND;
 import static org.eclipse.microprofile.lra.annotation.ws.rs.LRA.LRA_HTTP_CONTEXT_HEADER;
 import static org.eclipse.microprofile.lra.annotation.ws.rs.LRA.LRA_HTTP_PARENT_CONTEXT_HEADER;
 import static org.eclipse.microprofile.lra.annotation.ws.rs.LRA.LRA_HTTP_RECOVERY_HEADER;
@@ -529,11 +530,17 @@ public class ServerLRAFilter implements ContainerRequestFilter, ContainerRespons
 
                         progress = updateProgress(progress, ProgressStep.Ended, null);
                     }
-                } catch (NotFoundException ignore) {
-                    // must already be cancelled (if the intercepted method caused it to cancel)
-                    // or completed (if the intercepted method caused it to complete
-                    progress = updateProgress(progress, ProgressStep.Ended, null);
-                } catch (WebApplicationException | ProcessingException e) {
+                } catch (WebApplicationException e) {
+                    if (e.getResponse().getStatus() == NOT_FOUND.getStatusCode()) {
+                        // must already be cancelled (if the intercepted method caused it to cancel)
+                        // or completed (if the intercepted method caused it to complete
+                        progress = updateProgress(progress, ProgressStep.Ended, null);
+                    } else {
+                        // same as ProcessingException case
+                        progress = updateProgress(progress,
+                            isCancel ? ProgressStep.CancelFailed : ProgressStep.CloseFailed, e.getMessage());
+                    }
+                } catch (ProcessingException e) {
                     progress = updateProgress(progress,
                             isCancel ? ProgressStep.CancelFailed : ProgressStep.CloseFailed, e.getMessage());
                 } finally {
