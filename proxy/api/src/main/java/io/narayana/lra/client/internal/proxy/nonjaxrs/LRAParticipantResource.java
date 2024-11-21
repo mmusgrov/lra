@@ -5,6 +5,7 @@
 
 package io.narayana.lra.client.internal.proxy.nonjaxrs;
 
+import io.narayana.lra.proxy.logging.LRAProxyLogger;
 import org.eclipse.microprofile.lra.annotation.AfterLRA;
 import org.eclipse.microprofile.lra.annotation.Compensate;
 import org.eclipse.microprofile.lra.annotation.Complete;
@@ -96,9 +97,10 @@ public class LRAParticipantResource {
     private LRAParticipant getParticipant(String participantId) {
         LRAParticipant participant = lraParticipantRegistry.getParticipant(participantId);
         if (participant == null) {
-            throw new WebApplicationException(Response.status(Response.Status.NOT_FOUND).
-                    entity(participantId + ": Cannot find participant in LRA registry")
-                    .build()); // TODO use an i18n logger
+            String errMsg = LRAProxyLogger.i18NLogger.error_missingParticipant(participantId);
+            throw new WebApplicationException(errMsg, Response.status(Response.Status.NOT_FOUND)
+                    .entity(errMsg)
+                    .build());
         }
         return participant;
     }

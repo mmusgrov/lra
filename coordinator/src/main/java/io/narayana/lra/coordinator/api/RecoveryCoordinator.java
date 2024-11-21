@@ -118,14 +118,13 @@ public class RecoveryCoordinator {
                 lra = new URI(lraId);
             } catch (URISyntaxException e) {
                 LRALogger.i18nLogger.error_invalidFormatOfLraIdReplacingCompensatorURI(lraId, compensatorUrl, e);
-                String errMsg = String.format("%s: %s", lraId, e.getMessage()); // TODO check coordinator responses use the i18n logger
-                throw new WebApplicationException(Response.status(BAD_REQUEST)
+                String errMsg = LRALogger.i18nLogger.warn_invalid_uri(lraId, e.getMessage() + " replaceCompensator");
+                throw new WebApplicationException(errMsg, Response.status(BAD_REQUEST)
                         .entity(errMsg)
                         .build());
             }
 
             if (!lraService.updateRecoveryURI(lra, newCompensatorUrl, context, true)) {
-                // TODO add a test for it
                 throw new ServiceUnavailableException(
                         LRALogger.i18nLogger.warn_saveState(LongRunningAction.DEACTIVATE_REASON));
             }

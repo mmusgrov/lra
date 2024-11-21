@@ -860,11 +860,6 @@ public class LongRunningAction extends BasicAction {
                         LRALogger.i18nLogger.warn_saveState("could not durably record the new time limit"));
             }
 
-            if (LRALogger.logger.isTraceEnabled()) {
-                // TODO are these trace statements are useful
-                trace_progress("enlisted " + p.getParticipantPath());
-            }
-
             return p;
         } else if (isRecovering() && p.getCompensator() == null && p.getEndNotificationUri() != null) {
             // the participant is an AfterLRA listener so manually add it to heuristic list
@@ -938,6 +933,9 @@ public class LongRunningAction extends BasicAction {
             try {
                 pUrl = LRAParticipantRecord.extractCompensator(participantUrl);
             } catch (URISyntaxException e) {
+                LRALogger.logger.info(LRALogger.i18nLogger.warn_invalid_uri(
+                        participantUrl, e.getMessage() + " findLRAParticipant"));
+
                 return null;
             }
             rec = findLRAParticipant(pUrl, remove, pendingList, preparedList, heuristicList, failedList);

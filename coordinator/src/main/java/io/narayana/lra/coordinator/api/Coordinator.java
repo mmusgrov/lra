@@ -177,11 +177,11 @@ public class Coordinator extends Application {
             try {
                 requestedLRAStatus = LRAStatus.valueOf(state);
             } catch (IllegalArgumentException e) {
-                String errorMsg = "Status " + state + " is not a valid LRAStatus value";
-                LRALogger.logger.debugf(errorMsg); // TODO use an i18n log message
-                throw new WebApplicationException(Response.status(BAD_REQUEST)
+                String errMsg = "Status " + state + " is not a valid LRAStatus value";
+                LRALogger.logger.info(errMsg);
+                throw new WebApplicationException(errMsg, Response.status(BAD_REQUEST)
                         .header(NARAYANA_LRA_API_VERSION_HEADER_NAME, version)
-                        .entity(errorMsg)
+                        .entity(errMsg)
                         .build());
             }
         }
@@ -352,14 +352,14 @@ public class Coordinator extends Application {
                         }
                     }
                 } catch (Exception e) {
-                    String errorMsg = String.format(
+                    String errMsg = String.format(
                             "Cannot contact the LRA Coordinator at '%s' for LRA '%s' joining parent LRA '%s'",
                             parentId, lraId, parentLRA);
-                    LRALogger.logger.debugf(errorMsg); // TODO use an i18n log message
+                    LRALogger.logger.info(errMsg);
                     // don't include the root exception (it should already be in the server side logs):
-                    throw new WebApplicationException(Response.status(INTERNAL_SERVER_ERROR)
+                    throw new WebApplicationException(errMsg, Response.status(INTERNAL_SERVER_ERROR)
                             .header(NARAYANA_LRA_API_VERSION_HEADER_NAME, version)
-                            .entity(errorMsg)
+                            .entity(errMsg)
                             .build());
                 }
             }
@@ -423,10 +423,10 @@ public class Coordinator extends Application {
         LRAStatus status = lra.getLRAStatus();
 
         if (status == null || lra.getLRAStatus() == null) {
-            String logMsg = LRALogger.i18nLogger.error_cannotGetStatusOfNestedLraURI(nestedLraId, lra.getId());
-            LRALogger.logger.debug(logMsg);
-            throw new WebApplicationException(Response.status(PRECONDITION_FAILED)
-                    .entity(logMsg)
+            String errMsg = LRALogger.i18nLogger.error_cannotGetStatusOfNestedLraURI(nestedLraId, lra.getId());
+            LRALogger.logger.debug(errMsg);
+            throw new WebApplicationException(errMsg, Response.status(PRECONDITION_FAILED)
+                    .entity(errMsg)
                     .build());
         }
 
@@ -446,9 +446,9 @@ public class Coordinator extends Application {
                 // the status has been provided by a nested coordinator which we don't necessarily control
                 // - it's not a client error but a problem with the remote server so we have no other option
                 // than to report it as an internal error:
-                String errMsg = String.format("Remote coordinator produced an invalid LRAStatus enum value: %s",
-                        lraStatus); // TODO use an i18n log message because it means the environment is misconfigured
-                throw new WebApplicationException(Response.status(INTERNAL_SERVER_ERROR)
+                String errMsg = LRALogger.i18nLogger.warn_invalid_lraStatus(String.valueOf(lraStatus));
+                LRALogger.logger.debug(errMsg);
+                throw new WebApplicationException(errMsg, Response.status(INTERNAL_SERVER_ERROR)
                         .entity(errMsg)
                         .build());
         }
@@ -527,8 +527,8 @@ public class Coordinator extends Application {
 
             return buildResponse(lraData.getStatus().name(), version, mediaType);
         } catch (WebApplicationException e) {
-            // TODO wrap the others so the caller sees the root cause (don't know why the information is lost)
-            // otherwise the caller just sees a generic message corresponding to e.getResponse().getStatus()
+            LRALogger.logger.debug(e.getMessage());
+            // catch it otherwise the caller just sees a generic message corresponding to e.getResponse().getStatus()
             // eg for a 503 it would be "Service Unavailable"
             // and if we throw new WebApplicationException(e.getMessage(), e);
             // then the caller sees the generic 500 Internal Server Error code rather than the specific 503 code
@@ -627,11 +627,11 @@ public class Coordinator extends Application {
 
         // test to see if the join request contains any participant specific data
         if (userData != null && !userData.isEmpty() && !isAllowParticipantData(version)) {
-            String logMsg = LRALogger.i18nLogger.error_participant_data_disallowed(lraId);
-            LRALogger.logger.error(logMsg);
+            String errMsg = LRALogger.i18nLogger.error_participant_data_disallowed(lraId);
+            LRALogger.logger.error(errMsg);
 
-            throw new WebApplicationException(Response.status(PRECONDITION_FAILED)
-                    .entity(logMsg)
+            throw new WebApplicationException(errMsg, Response.status(PRECONDITION_FAILED)
+                    .entity(errMsg)
                     .header(NARAYANA_LRA_API_VERSION_HEADER_NAME, version)
                     .build());
         }
@@ -746,10 +746,10 @@ public class Coordinator extends Application {
                     .header(NARAYANA_LRA_API_VERSION_HEADER_NAME, version)
                     .build();
         } catch (URISyntaxException e) {
-            String logMsg = LRALogger.i18nLogger.error_invalidRecoveryUrlToJoinLRAURI(recoveryUrl.toString(), lraId);
-            LRALogger.logger.error(logMsg); // TODO make sure all WebApplicationExceptions are also reported in the logs
-            throw new WebApplicationException(Response.status(BAD_REQUEST)
-                    .entity(logMsg)
+            String errMsg = LRALogger.i18nLogger.error_invalidRecoveryUrlToJoinLRAURI(recoveryUrl.toString(), lraId);
+            LRALogger.logger.info(errMsg);
+            throw new WebApplicationException(errMsg, Response.status(BAD_REQUEST)
+                    .entity(errMsg)
                     .header(NARAYANA_LRA_API_VERSION_HEADER_NAME, version)
                     .build());
         }
@@ -815,10 +815,10 @@ public class Coordinator extends Application {
             try {
                 url = new URL(String.format("%s%s/%s", context.getBaseUri(), COORDINATOR_PATH_NAME, lraId));
             } catch (MalformedURLException e1) {
-                String logMsg = LRALogger.i18nLogger.error_invalidStringFormatOfUrl(lraId, e1);
-                LRALogger.logger.error(logMsg);
-                throw new WebApplicationException(Response.status(BAD_REQUEST)
-                        .entity(logMsg)
+                String errMsg = LRALogger.i18nLogger.error_invalidStringFormatOfUrl(lraId, e1);
+                LRALogger.logger.error(errMsg);
+                throw new WebApplicationException(errMsg, Response.status(BAD_REQUEST)
+                        .entity(errMsg)
                         .build());
             }
         }
@@ -826,10 +826,10 @@ public class Coordinator extends Application {
         try {
             return url.toURI();
         } catch (URISyntaxException e) {
-            String logMsg = LRALogger.i18nLogger.error_invalidStringFormatOfUrl(lraId, e);
-            LRALogger.logger.error(logMsg); // TODO check that we use a consistent set of i18n messages - ie some are quite similar
-            throw new WebApplicationException(Response.status(BAD_REQUEST)
-                    .entity(logMsg)
+            String errMsg = LRALogger.i18nLogger.error_invalidStringFormatOfUrl(lraId, e);
+            LRALogger.logger.warn(errMsg);
+            throw new WebApplicationException(errMsg, Response.status(BAD_REQUEST)
+                    .entity(errMsg)
                     .build());
         }
     }

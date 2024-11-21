@@ -135,11 +135,6 @@ public class ProxyService {
         if (proxy == null) {
             String errorMsg = String.format("Cannot find participant proxy for LRA id %s, participant id %s",
                     lraId, participantId);
-            // TODO any errorMsg is available to the client via the JAX RS response
-            // so does the proxy api need to retrieve the message by the Throwable.getMessage() method
-            // the same TODO comment applies throughout the code base where we aren't using the constructors
-            // that accept the message via Throwable.getMessage() and do we want to make it consistent
-            // nb we don't use it consistently so either remove them all or add it to them all
             throw new NotFoundException(errorMsg,
                     Response.status(NOT_FOUND).entity(errorMsg).build());
         }

@@ -670,8 +670,9 @@ public class ServerLRAFilter implements ContainerRequestFilter, ContainerRespons
     }
 
     // convert the list of steps carried out by the filters into a warning message
-    // the successful operations are logged at debug and the unsuccessful operations are reported back to the caller
-    // TODO there should only be one failed op so I don't think attempting to report multiple failures is useful
+    // the successful operations are logged at debug and the unsuccessful operations are reported back to the caller.
+    // The reason we log multiple failures is that one failure can trigger other operations that may also fail,
+    // eg enlisting with an LRA could fail followed by a failure to cancel the LRA
     private String processLRAOperationFailures(ArrayList<Progress> progress) {
         StringJoiner badOps = new StringJoiner(", ");
         StringBuilder code = new StringBuilder("-");
@@ -682,16 +683,9 @@ public class ServerLRAFilter implements ContainerRequestFilter, ContainerRespons
         });
 
         /*
-         * return a string which encodes the result:
-         * <major code>-<failed op codes>-<successful op codes>: <details of failed ops> (<details of successful ops>)
-         *
-         * where
-         *
-         * <major code>: corresponds to the id of the message in the logs
-         * <failed op codes>: each digit corresponds to the enum ordinal value of the ProgressStep enum value that was successful
-         * <successful op codes>: each digit corresponds to the enum ordinal value of the ProgressStep enum value that failed
-         * <details of failed ops>: comma separated list of failed operation details "<op name> (<exception message>)"
-         * <details of successful ops>: comma separated list of successful operation details "<op name> (<op description>)"
+         * Previously we returned a string which enabled the reader to distinguish between successful and
+         * unsuccessful state transitions but a more fruitful approach is to report problems via i18n message ids
+         * and leave successful ops and implicit
          */
 
         if (badOps.length() != 0) {

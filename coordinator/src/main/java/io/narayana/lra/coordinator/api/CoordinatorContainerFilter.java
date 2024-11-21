@@ -37,7 +37,6 @@ public class CoordinatorContainerFilter implements ContainerRequestFilter, Conta
             try {
                 lraId = new URI(Current.getLast(headers.get(LRA_HTTP_CONTEXT_HEADER)));
             } catch (URISyntaxException e) {
-                // TODO use an i18n log message - we need this so that we have a log message id to reason about
                 String errMsg = String.format("header %s contains an invalid URL %s: %s",
                         LRA_HTTP_CONTEXT_HEADER, Current.getLast(headers.get(LRA_HTTP_CONTEXT_HEADER)), e.getMessage());
                 LRALogger.logger.info(errMsg);

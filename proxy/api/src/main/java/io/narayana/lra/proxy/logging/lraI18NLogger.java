@@ -37,6 +37,8 @@ public interface lraI18NLogger {
     @Message(id = 25003, value = "Cannot get status of participant '%s' of lra id '%s'")
     String error_gettingParticipantStatus(String participant, String lraId, @Cause Throwable e);
 
+    @Message(id = 25004, value = "%s: Cannot find participant in LRA registry")
+    String error_missingParticipant(String participant);
 
     /*
         Allocate new messages directly above this notice.

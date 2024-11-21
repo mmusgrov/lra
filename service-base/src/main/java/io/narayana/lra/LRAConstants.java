@@ -5,6 +5,8 @@
 
 package io.narayana.lra;
 
+import io.narayana.lra.logging.LRALogger;
+
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.regex.Pattern;
@@ -112,8 +114,8 @@ public final class LRAConstants {
             return new URI(lraId.getScheme(), lraId.getUserInfo(), lraId.getHost(), lraId.getPort(), lraCoordinatorPath,
                     null, null);
         } catch (URISyntaxException use) {
-            throw new IllegalStateException("Cannot construct URI from the LRA coordinator URL path '" + lraCoordinatorPath
-                    + "' extracted from the LRA id URI '" + lraId + "'");
+            String errMsg = LRALogger.i18nLogger.warn_invalid_uri(lraId.toASCIIString(), "getLRACoordinatorUrl");
+            throw new IllegalStateException(errMsg);
         }
     }
 }

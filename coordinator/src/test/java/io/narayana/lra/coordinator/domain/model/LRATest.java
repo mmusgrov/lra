@@ -1184,7 +1184,7 @@ public class LRATest extends LRATestBase {
             assertEquals(503, response.getStatus());
             assertTrue(response.hasEntity());
             String message = response.readEntity(String.class);
-            assertTrue(message.contains("LRA025032")); // TODO the error messages are too expansive
+            assertTrue(message.contains("LRA025032"));
         }
 
         // verify that nothing was written to the store

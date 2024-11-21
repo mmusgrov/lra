@@ -187,7 +187,6 @@ public class LRATestBase {
         public Response timeLimitTest(@HeaderParam(LRA_HTTP_CONTEXT_HEADER) URI lraId) {
             try {
                 Thread.sleep(1000); // sleep for longer than specified in the timeLimit annotation attribute
-                // TODO use byteman
 
                 // force the implementation to notice that the LRA should have timed out by triggering
                 // a recovery scan so that the coordinator redelivers the listener notification which can take

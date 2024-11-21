@@ -254,9 +254,6 @@ public class LRAService {
         try {
             lra = new LongRunningAction(this, baseUri, lookupTransaction(parentLRA), clientId);
         } catch (URISyntaxException e) {
-            // TODO check what the default JAX RS mapper uses for URISyntaxException
-            // nb the lra-proxy-api module wraps it with InvalidLRAStateException
-            // write a test to see what code they end up getting mapped to
             throw new WebApplicationException(e.getMessage(),
                     Response.status(Response.Status.PRECONDITION_FAILED)
                     .entity(String.format("Invalid base URI: '%s'", baseUri))
@@ -276,7 +273,7 @@ public class LRAService {
             lraTrace(lra.getId(), "failed to start LRA");
             lra.finishLRA(true);
 
-            String errorMsg = "Could not start LRA: " + ActionStatus.stringForm(status);  // TODO use an i18n logger
+            String errorMsg = "Could not start LRA: " + ActionStatus.stringForm(status);
 
             throw new WebApplicationException(Response.status(INTERNAL_SERVER_ERROR)
                     .entity(errorMsg)
@@ -298,7 +295,7 @@ public class LRAService {
         LongRunningAction transaction = getTransaction(lraId);
 
         if (transaction.getLRAStatus() != LRAStatus.Active && !transaction.isRecovering() && transaction.isTopLevel()) {
-            String errorMsg = String.format("%s: LRA is closing or closed: endLRA", lraId); // TODO use an i18n logger
+            String errorMsg = String.format("%s: LRA is closing or closed: endLRA", lraId);
             throw new WebApplicationException(errorMsg, Response.status(Response.Status.PRECONDITION_FAILED)
                     .entity(errorMsg).build());
         }
@@ -330,7 +327,6 @@ public class LRAService {
         try {
             wasForgotten = transaction.forgetParticipant(compensatorUrl);
         } catch (Exception e) {
-            // TODO use an i18n logger
             String errorMsg = String.format("LRAService.forget %s failed on finding participant '%s'", lraId, compensatorUrl);
             throw new WebApplicationException(errorMsg, e, Response.status(Response.Status.BAD_REQUEST)
                     .entity(errorMsg).build());
@@ -338,7 +334,6 @@ public class LRAService {
         if (wasForgotten) {
             return Response.Status.OK.getStatusCode();
         } else {
-            // TODO use an i18n logger
             String errorMsg = String.format("LRAService.forget %s failed as the participant was not found, compensator url '%s'",
                     lraId, compensatorUrl);
             throw new WebApplicationException(errorMsg, Response.status(Response.Status.BAD_REQUEST)

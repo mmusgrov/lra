@@ -61,7 +61,6 @@ public class ParticipantProxyResource {
         } catch (URISyntaxException e) {
             String logMsg = LRAProxyLogger.i18NLogger.error_gettingParticipantStatus(participantId, lraId, e);
             LRAProxyLogger.logger.error(logMsg);
-            // TODO the proxy API does not use JAX-RS directly so investigate that problems are reported consistently
             throw new InvalidLRAStateException(logMsg);
         }
     }

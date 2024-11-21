@@ -38,9 +38,6 @@ public interface LraI18nLogger {
     @Message(id = 25003, value = "LRA participant class '%s' with asynchronous temination but no @Status or @Forget annotations")
     String error_asyncTerminationBeanMissStatusAndForget(Class<?> clazz);
 
-    @Message(id = 25004, value = "LRA finished with an unexpected status code: %d, coordinator response '%s'")
-    String error_lraTerminationUnexpectedStatus(int status, String response);
-
     @Message(id = 25005, value = "LRA coordinator '%s' returned an invalid status code '%s' for LRA '%s'")
     String error_invalidStatusCode(URI coordinator, int status, URL lra);
 
@@ -52,9 +49,6 @@ public interface LraI18nLogger {
 
     @Message(id = 25008, value = "Too late to join with the LRA '%s', coordinator response: '%s'")
     String error_tooLateToJoin(String lra, String response);
-
-    @Message(id = 25009, value = "Failed enlisting to LRA '%s', coordinator '%s' responded with status '%s'")
-    String error_failedToEnlist(URL lra, URI coordinator, int status);
 
     @Message(id = 25010, value = "Error when converting String '%s' to URL")
     String error_invalidStringFormatOfUrl(String string, @Cause Throwable t);
@@ -168,6 +162,15 @@ public interface LraI18nLogger {
 
     @Message(id = 25041, value = "Participant provided invalid callback endpoints, reason: %s link: %s")
     String warn_invalid_compensator(String reason, String linkStr);
+
+    @Message(id = 25042, value = "Invalid timeout value: %d")
+    String warn_invalid_timeout(long timeout);
+
+    @Message(id = 25043, value = "Remote coordinator produced an invalid LRAStatus enum value: %s")
+    String warn_invalid_lraStatus(String status);
+
+    @Message(id = 25044, value = "%s is not a valid URI (%s)")
+    String warn_invalid_uri(String uri, String location);
 
     /*
         Allocate new messages directly above this notice.

@@ -190,7 +190,6 @@ public class LRAParticipantRecord extends AbstractRecord implements Comparable<A
             try {
                 link = Link.valueOf(lnk);
             } catch (IllegalArgumentException e) {
-                // TODO check which http code the default exception mapper uses for URISyntaxException
                 throw new URISyntaxException(lnk, e.getMessage());
             }
 
