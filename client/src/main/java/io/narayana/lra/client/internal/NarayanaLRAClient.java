@@ -622,7 +622,7 @@ public class NarayanaLRAClient implements Closeable {
                 return LRAStatus.valueOf(response.readEntity(String.class));
             } catch (IllegalArgumentException e) {
                 String logMsg = LRALogger.i18nLogger.error_invalidArgumentOnStatusFromCoordinator(coordinatorUrl,
-                        lraId);
+                        lraId, e);
                 LRALogger.logger.error(logMsg);
                 throw new WebApplicationException(Response.status(INTERNAL_SERVER_ERROR).entity(logMsg).build());
             }
@@ -785,7 +785,7 @@ public class NarayanaLRAClient implements Closeable {
                     .header(NARAYANA_LRA_PARTICIPANT_DATA_HEADER_NAME, userData)
                     .async()
                     .put(Entity.text(""))
-                    .get(END_TIMEOUT*100, TimeUnit.SECONDS);
+                    .get(END_TIMEOUT, TimeUnit.SECONDS);
             } catch (InterruptedException | ExecutionException | TimeoutException e) {
                 throw new WebApplicationException(Response.status(SERVICE_UNAVAILABLE)
                         .entity("end LRA client request timed out, try again later")

@@ -45,7 +45,7 @@ public interface LraI18nLogger {
     String error_noContentOnGetStatus(URI coordinator, URL lra);
 
     @Message(id = 25007, value = "LRA coordinator '%s' returned an invalid status for LRA '%s'")
-    String error_invalidArgumentOnStatusFromCoordinator(URI coordinator, URL lra);
+    String error_invalidArgumentOnStatusFromCoordinator(URI coordinator, URL lra, @Cause Throwable t);
 
     @Message(id = 25008, value = "Too late to join with the LRA '%s', coordinator response: '%s'")
     String error_tooLateToJoin(String lra, String response);
@@ -129,7 +129,7 @@ public interface LraI18nLogger {
     @Message(id=25031, value = "%s: Invalid link URI (%s): missing compensator or after LRA callback")
     String error_missingCompensator(URI id, String linkURI);
 
-    @Message(id = 25032, value = "LRA Record: Cannot save state, %s")
+    @Message(id = 25032, value = "LRA Record: Cannot save state (reason: %s)")
     String warn_saveState(String cause);
 
     @LogMessage(level = WARN)
